@@ -165,6 +165,12 @@ main{max-width:1200px;margin:0 auto;padding:22px 20px 96px}
 .mini-foot{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:baseline;font-size:13px}
 
 /* schedule */
+.nextbox{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;justify-content:space-between;background:var(--red);color:#fff;border-radius:var(--r);padding:14px 16px;margin-bottom:12px}
+.nextbox .kicker,.nextbox .lbl{color:rgba(255,255,255,.85)}
+.nb-title{font-size:20px;font-weight:900;text-transform:uppercase;margin:2px 0 6px}
+.nb-sess{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:14px}
+.nb-btn{font:700 13px var(--sans);padding:10px 14px;border:2px solid #fff;border-radius:var(--r);color:#fff;white-space:nowrap}
+.nb-btn:hover{background:#fff;color:var(--red)}
 .races{display:flex;flex-direction:column;gap:8px}
 .race{background:var(--card);border:1px solid var(--line);border-radius:var(--r);scroll-margin-top:calc(var(--hdr) + 48px)}
 .race.st-live,.race.st-weekend{border-left:3px solid var(--red)}
@@ -1268,8 +1274,8 @@ function dtf(opts, locale = 'en-GB') {
   if (!f) { try { f = new Intl.DateTimeFormat(locale, { timeZone: id, ...opts }); } catch (e) { f = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', ...opts }); } FMT.set(k, f); }
   return f;
 }
-const tHM = ts => dtf({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ts);
 const isKo = () => S.lang === 'ko';
+const tHM = ts => isKo() ? dtf({ hour: 'numeric', minute: '2-digit', hour12: true }, 'ko-KR').format(ts) : dtf({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ts);
 const tMD = ts => isKo() ? dtf({ month: 'long', day: 'numeric' }, 'ko-KR').format(ts) : dtf({ month: 'short', day: '2-digit' }, 'en-US').format(ts).toUpperCase();
 const tWD = ts => isKo() ? dtf({ weekday: 'short' }, 'ko-KR').format(ts) : dtf({ weekday: 'short' }, 'en-US').format(ts).toUpperCase();
 const tWDL = ts => isKo() ? dtf({ weekday: 'long' }, 'ko-KR').format(ts) : dtf({ weekday: 'long' }, 'en-US').format(ts).toUpperCase();
@@ -1302,6 +1308,10 @@ function relText(ts) {
   const d = Math.floor(ms / DAY); ms -= d * DAY; const h = Math.floor(ms / HOUR); ms -= h * HOUR; const m = Math.floor(ms / MIN);
   if (isKo()) return (d ? `${d}일 ${h}시간` : h ? `${h}시간 ${m}분` : `${m}분`) + ' 후';
   return 'in ' + (d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`);
+}
+function cdText(ts) {
+  const t = Math.max(0, Math.floor((ts - Date.now()) / 1000)), d = Math.floor(t / 86400);
+  return (d ? (isKo() ? `${d}일 ` : `${d}d `) : '') + [Math.floor(t % 86400 / 3600), Math.floor(t % 3600 / 60), t % 60].map(pad).join(':');
 }
 function sessTime(s) {
   if (!s.timeKnown) return `${tDate(s.start)} · ${L('TBC')}`;
@@ -1483,7 +1493,16 @@ function scheduleHTML() {
   const c = { completed: 0, live: 0, weekend: 0, upcoming: 0, cancelled: 0 };
   races.forEach(r => { c[raceState(r, now)]++; });
   const meta = `${L('{0} COMPLETED', c.completed)} · ${L('{0} REMAINING', c.live + c.weekend + c.upcoming)}${c.cancelled ? ` · ${L('{0} CANCELLED', c.cancelled)}` : ''}<br><span class="dim">${esc(L('TIMES IN {0}', `${tzAbbr()} (${tzOffset()})`))}</span>`;
-  return pageHead(L('{0} CALENDAR · {1} ROUNDS', S.season, races.length), L('Schedule'), meta) + `<div class="races">${races.map(r => raceCardHTML(r, now)).join('')}</div>`;
+  return pageHead(L('{0} CALENDAR · {1} ROUNDS', S.season, races.length), L('Schedule'), meta) + nextBoxHTML(races, now) + `<div class="races">${races.map(r => raceCardHTML(r, now)).join('')}</div>`;
+}
+function nextBoxHTML(races, now) {
+  const next = races.find(r => ['live', 'weekend', 'upcoming'].includes(raceState(r, now)));
+  if (!next) return '';
+  const liveS = next.sessions.find(s => sessionState(s, now) === 'live');
+  const nextS = next.sessions.find(s => !s.cancelled && s.timeKnown && s.start > now);
+  const line = liveS ? `<span class="tag live">LIVE</span> <b class="up">${esc(sessionName(liveS))}</b>`
+    : nextS ? `<span class="lbl">${L('NEXT SESSION')}</span> <b class="up">${esc(sessionName(nextS))}</b> <span class="mono">${tWD(nextS.start)} ${tHM(nextS.start)}</span> <b class="mono" data-cdt="${nextS.start}">${cdText(nextS.start)}</b>` : '';
+  return `<div class="nextbox"><div class="nb-main"><div class="kicker">${L('NEXT RACE')} · ${L('ROUND')} ${pad(next.round)}</div><div class="nb-title">${esc(gpName(next))}</div><div class="nb-sess">${line}</div></div><a class="nb-btn" href="${href('schedule/' + next.round)}">${isKo() ? '다음 레이스로 이동' : 'GO TO NEXT RACE'} ↓</a></div>`;
 }
 function raceCardHTML(r, now) {
   const st = raceState(r, now), open = S.ui.openRaces.has(r.round);
@@ -2033,6 +2052,7 @@ setInterval(() => {
   const now = Date.now();
   $$('[data-cd]').forEach(el => { el.innerHTML = cdInner(+el.dataset.cd); });
   $$('[data-rel]').forEach(el => { el.textContent = relText(+el.dataset.rel); });
+  $$('[data-cdt]').forEach(el => { el.textContent = cdText(+el.dataset.cdt); });
   if (now - LAST_CHECK > 20e3 && S.d.schedule) {
     LAST_CHECK = now; const sig = stateSig(now);
     if (LAST_SIG && sig !== LAST_SIG) { const v = parseRoute().view; if (v === 'home' || v === 'schedule' || v === 'results') render({ keepScroll: true }); queueStatus(); }
