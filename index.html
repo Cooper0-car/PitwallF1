@@ -422,6 +422,7 @@ footer.foot a{color:var(--tx2);text-decoration:underline}
       <label class="sr" for="langSel">Language</label><select id="langSel" class="sel sel-lang" title="Language"><option value="ko">KO</option><option value="en">EN</option></select>
       <label class="sr" for="seasonSel">Season</label><select id="seasonSel" class="sel" title="Season"></select>
       <label class="sr" for="tzSel">Timezone</label><select id="tzSel" class="sel" title="Timezone"></select>
+      <button id="nativeCfg" class="sel" type="button" title="알림 설정" style="display:none">⚙</button>
     </div>
   </div>
 </header>
@@ -2044,6 +2045,9 @@ window.addEventListener('hashchange', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.updatedAt && Date.now() - S.updatedAt > 10 * MIN) refreshAll(false);
 });
+
+// 안드로이드 앱 안에서만 보이는 알림 설정 버튼
+if (window.PitwallNative && PitwallNative.openSettings) { const b = $('#nativeCfg'); b.style.display = ''; b.onclick = () => PitwallNative.openSettings(); }
 
 // 1-second ticker: countdowns, relative times, and re-render when a session changes state.
 let LAST_SIG = '', LAST_CHECK = 0;
